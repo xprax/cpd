@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Shipments</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Track Shipments</h1>
+    <form id="tracking-form">
+        <label for="tracking_ids">Enter Tracking IDs (one per line):</label>
+        <textarea rows="10" cols="30" placeholder="Enter Tracking Ids" id="tracking_ids" name="tracking_ids" style="margin-right:10px"></textarea>
+        <button type="submit">Track</button>
+    </form>
+    <div id="result"></div>
+    <button id="export-button" style="display:none;">Export to Excel</button>
+    <script>
+        $(document).ready(function() {
+            $('#tracking-form').submit(function(event) {
+                event.preventDefault();
+                var tracking_ids = $('#tracking_ids').val();
+                $.post('/fetch', { tracking_ids: tracking_ids }, function(data) {
+                    if (data.error) {
+                        $('#result').html('<p>No data found</p>');
+                    } else {
+                        var resultHtml = '<h2>Shipment Details</h2>';
+                        resultHtml += '<table border="1"><tr><th>Tracking ID</th><th>Shipment ID</th><th>COD Amount</th><th>Customer Info</th><th>Agent Info</th></tr>';
+                        data.forEach(function(item) {
+                            resultHtml += '<tr>';
+                            resultHtml += '<td>' + item.tracking_id + '</td>';
+                            resultHtml += '<td>' + item.shipment_id + '</td>';
+                            resultHtml += '<td>' + item.cod_amount + '</td>';
+                            resultHtml += '<td>' + JSON.stringify(item.customer_info) + '</td>';
+                            resultHtml += '<td>' + JSON.stringify(item.agent_info) + '</td>';
+                            resultHtml += '</tr>';
+                        });
+                        resultHtml += '</table>';
+                        $('#result').html(resultHtml);
+                        $('#export-button').show().data('exportData', data);
+                    }
+                }).fail(function(xhr, status, error) {
+                    $('#result').html('<p>Error: ' + error + '</p>');
+                });
+            });
+
+            $('#export-button').click(function() {
+                var exportData = $(this).data('exportData');
+                $.ajax({
+                    type: 'POST',
+                    url: '/export',
+                    contentType: 'application/json',
+                    data: JSON.stringify(exportData),
+                    success: function(response) {
+                        var excelData = response.excel_data;
+                        var a = document.createElement('a');
+                        a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + excelData;
+                        a.download = 'shipment_data.xlsx';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
