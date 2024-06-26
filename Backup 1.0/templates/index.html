@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Shipments</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .result-table {
+            margin-top: 20px;
+        }
+        .table th, .table td {
+            text-align: left;
+            cursor: pointer;
+        }
+        .table td {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 500px; /* address column width */
+        }
+        .active-cell {
+            background-color: #d3d3d3;
+        }
+        .popup {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #5cb85c;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+        .loading-spinner {
+            display: none;
+            margin: 0 auto;
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 5px solid #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .tap-to-copy {
+            display: none;
+        }
+        @media (hover: none) and (pointer: coarse) {
+            .tap-to-copy {
+                display: inline;
+                font-size: 10px;
+                background: rgba(255, 255, 255, 0.8);
+                padding: 2px 5px;
+                border-radius: 3px;
+                position: absolute;
+                top: 5px;
+                right: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Track Shipments</h1>
+        <form id="tracking-form">
+            <div class="form-group">
+                <label for="tracking_ids">Enter Tracking IDs (one per line):</label>
+                <textarea class="form-control" rows="2" id="tracking_ids" name="tracking_ids" placeholder="Enter Tracking Ids"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Track</button>
+            <button type="button" id="copy-all-button" class="btn btn-secondary">Copy All</button>
+        </form>
+        <div id="loading-spinner" class="loading-spinner"></div>
+        <div id="result" class="result-table"></div>
+        <button id="export-button" class="btn btn-success" style="display:none;">Export to Excel</button>
+    </div>
+    <div id="copy-popup" class="popup">Copied to clipboard</div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#tracking_ids').keypress(function(event) {
+                if (event.keyCode === 13) {
+                    event.preventDefault();
+                    $('#tracking-form').submit();
+                }
+            });
+
+            $('#tracking-form').submit(function(event) {
+                event.preventDefault();
+                $('#loading-spinner').show();
+                var tracking_ids = $('#tracking_ids').val();
+                $.post('/fetch', { tracking_ids: tracking_ids }, function(data) {
+                    $('#loading-spinner').hide();
+                    if (data.error) {
+                        $('#result').html('<div class="alert alert-danger" role="alert">No data found</div>');
+                    } else {
+                        var resultHtml = '<h2>Shipment Details</h2>';
+                        resultHtml += '<table class="table table-bordered"><thead><tr><th>Shipment ID</th><th>Name</th><th>COD Amount</th><th>Address</th><th>Agent Info</th><th>Customer Promise Date</th><th>Item Details</th></tr></thead><tbody>';
+                        data.forEach(function(item) {
+                            resultHtml += '<tr>';
+                            resultHtml += '<td class="table-cell">' + item.shipment_id + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + item.customer_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + item.cod_amount + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + formatCustomerInfo(item.customer_info) + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + item.agent_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + item.customer_promise_date + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell">' + item.item_details + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '</tr>';
+                        });
+                        resultHtml += '</tbody></table>';
+                        $('#result').html(resultHtml);
+                        $('#export-button').show().data('exportData', data);
+                        enableKeyboardNavigation();
+                    }
+                }).fail(function(xhr, status, error) {
+                    $('#loading-spinner').hide();
+                    $('#result').html('<div class="alert alert-danger" role="alert">Error: ' + error + '</div>');
+                });
+            });
+
+            $('#copy-all-button').click(function() {
+                copyAllToClipboard();
+            });
+
+            $('#export-button').click(function() {
+                var exportData = $(this).data('exportData');
+                $.ajax({
+                    type: 'POST',
+                    url: '/export',
+                    contentType: 'application/json',
+                    data: JSON.stringify(exportData),
+                    success: function(response) {
+                        var excelData = response.excel_data;
+                        var a = document.createElement('a');
+                        a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + excelData;
+                        a.download = 'shipment_data.xlsx';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                });
+            });
+
+            function formatCustomerInfo(info) {
+                return [info.address1, info.address2, info.city, info.state, info.pincode].filter(Boolean).join(', ');
+            }
+
+            function copyAllToClipboard() {
+                var table = document.querySelector('.table');
+                var range = document.createRange();
+                range.selectNode(table);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                document.execCommand('copy');
+                window.getSelection().removeAllRanges();
+                showPopup();
+            }
+
+            function showPopup() {
+                var popup = $('#copy-popup');
+                popup.fadeIn(200).delay(1000).fadeOut(200);
+            }
+
+            function enableKeyboardNavigation() {
+                var cells = $('.table-cell');
+                var currentCell = 0;
+                cells.eq(currentCell).addClass('active-cell');
+
+                $(document).keydown(function(e) {
+                    cells.eq(currentCell).removeClass('active-cell');
+                    if (e.which == 37) { // left arrow key
+                        if (currentCell % 7 !== 0) {
+                            currentCell = (currentCell - 1 + cells.length) % cells.length;
+                        }
+                    } else if (e.which == 38) { // up arrow key
+                        currentCell = (currentCell - 7 + cells.length) % cells.length;
+                    } else if (e.which == 39) { // right arrow key
+                        if (currentCell % 7 !== 6) {
+                            currentCell = (currentCell + 1) % cells.length;
+                        }
+                    } else if (e.which == 40) { // down arrow key
+                        currentCell = (currentCell + 7) % cells.length;
+                    }
+                    cells.eq(currentCell).addClass('active-cell');
+                });
+
+                // Add tap-to-copy functionality for mobile
+                $('.table-cell').on('click', function() {
+                    var range = document.createRange();
+                    range.selectNode(this);
+                    window.getSelection().removeAllRanges();
+                    window.getSelection().addRange(range);
+                    document.execCommand('copy');
+                    window.getSelection().removeAllRanges();
+                    showPopup();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
