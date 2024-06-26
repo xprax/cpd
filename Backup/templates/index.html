@@ -20,14 +20,11 @@
             margin-top: 20px;
         }
         .table th, .table td {
-            text-align: left;
+            text-align: center;
             cursor: pointer;
         }
         .table td {
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 500px; /* address column width */
         }
         .active-cell {
             background-color: #d3d3d3;
@@ -42,20 +39,6 @@
             border-radius: 5px;
             display: none;
             z-index: 1000;
-        }
-        .loading-spinner {
-            display: none;
-            margin: 0 auto;
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 5px solid #3498db;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
         .tap-to-copy {
             display: none;
@@ -85,7 +68,6 @@
             <button type="submit" class="btn btn-primary">Track</button>
             <button type="button" id="copy-all-button" class="btn btn-secondary">Copy All</button>
         </form>
-        <div id="loading-spinner" class="loading-spinner"></div>
         <div id="result" class="result-table"></div>
         <button id="export-button" class="btn btn-success" style="display:none;">Export to Excel</button>
     </div>
@@ -93,24 +75,15 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
-            $('#tracking_ids').keypress(function(event) {
-                if (event.keyCode === 13) {
-                    event.preventDefault();
-                    $('#tracking-form').submit();
-                }
-            });
-
             $('#tracking-form').submit(function(event) {
                 event.preventDefault();
-                $('#loading-spinner').show();
                 var tracking_ids = $('#tracking_ids').val();
                 $.post('/fetch', { tracking_ids: tracking_ids }, function(data) {
-                    $('#loading-spinner').hide();
                     if (data.error) {
                         $('#result').html('<div class="alert alert-danger" role="alert">No data found</div>');
                     } else {
                         var resultHtml = '<h2>Shipment Details</h2>';
-                        resultHtml += '<table class="table table-bordered"><thead><tr><th>Shipment ID</th><th>Name</th><th>COD Amount</th><th>Address</th><th>Agent Info</th><th>Customer Promise Date</th><th>Item Details</th></tr></thead><tbody>';
+                        resultHtml += '<table class="table table-bordered"><thead><tr><th>Shipment ID</th><th>Name</th><th>COD Amount</th><th>Address</th><th>Agent Info</th><th>Customer Promise Date</th></tr></thead><tbody>';
                         data.forEach(function(item) {
                             resultHtml += '<tr>';
                             resultHtml += '<td class="table-cell">' + item.shipment_id + '<span class="tap-to-copy">Tap to Copy</span></td>';
@@ -119,7 +92,6 @@
                             resultHtml += '<td class="table-cell">' + formatCustomerInfo(item.customer_info) + '<span class="tap-to-copy">Tap to Copy</span></td>';
                             resultHtml += '<td class="table-cell">' + item.agent_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
                             resultHtml += '<td class="table-cell">' + item.customer_promise_date + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.item_details + '<span class="tap-to-copy">Tap to Copy</span></td>';
                             resultHtml += '</tr>';
                         });
                         resultHtml += '</tbody></table>';
@@ -128,7 +100,6 @@
                         enableKeyboardNavigation();
                     }
                 }).fail(function(xhr, status, error) {
-                    $('#loading-spinner').hide();
                     $('#result').html('<div class="alert alert-danger" role="alert">Error: ' + error + '</div>');
                 });
             });
@@ -184,17 +155,17 @@
                 $(document).keydown(function(e) {
                     cells.eq(currentCell).removeClass('active-cell');
                     if (e.which == 37) { // left arrow key
-                        if (currentCell % 7 !== 0) {
+                        if (currentCell % 6 !== 0) {
                             currentCell = (currentCell - 1 + cells.length) % cells.length;
                         }
                     } else if (e.which == 38) { // up arrow key
-                        currentCell = (currentCell - 7 + cells.length) % cells.length;
+                        currentCell = (currentCell - 6 + cells.length) % cells.length;
                     } else if (e.which == 39) { // right arrow key
-                        if (currentCell % 7 !== 6) {
+                        if (currentCell % 6 !== 5) {
                             currentCell = (currentCell + 1) % cells.length;
                         }
                     } else if (e.which == 40) { // down arrow key
-                        currentCell = (currentCell + 7) % cells.length;
+                        currentCell = (currentCell + 6) % cells.length;
                     }
                     cells.eq(currentCell).addClass('active-cell');
                 });

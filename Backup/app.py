@@ -44,33 +44,6 @@ def fetch_data(tracking_id):
             app.logger.error(f"Request failed for tracking ID {tracking_id}: {e}")
             return {'status': 'error', 'message': str(e)}
 
-# Function to fetch bag info
-def fetch_bag_info(bag_id):
-    url = f'http://10.24.1.71/hub-ops-routes-api/sal-proxy/v1/loadservice/bag/{bag_id}/track'
-    
-    headers = {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    cookies = load_cookies('cookies.json')  # Load cookies from JSON file
-    
-    with requests.Session() as session:
-        session.headers.update(headers)
-        session.cookies.update(cookies)
-        try:
-            response = session.get(url, timeout=30)  # Set a 30-second timeout
-            response.raise_for_status()  # Will raise an HTTPError for bad responses
-            data = response.json()
-            app.logger.debug(f"Bag info for {bag_id}: {data}")
-            return data
-        except requests.exceptions.Timeout:
-            app.logger.error(f"Request timed out for bag ID {bag_id}")
-            return {'status': 'error', 'message': 'Request timed out'}
-        except requests.exceptions.RequestException as e:
-            app.logger.error(f"Request failed for bag ID {bag_id}: {e}")
-            return {'status': 'error', 'message': str(e)}
-
 # Route for the home page
 @app.route('/')
 def home():
@@ -101,14 +74,6 @@ def fetch():
                     if attribute['name'] == 'customer_promise_date':
                         customer_promise_date = attribute['value'].split(' ')[0]
                         break
-                bag_id = shipment.get('bag_info', {}).get('tracking_id', '')
-                item_details = ''
-                if bag_id:
-                    bag_data = fetch_bag_info(bag_id)
-                    if bag_data['status'] == 'success' and 'results' in bag_data:
-                        items = bag_data['results'][0].get('shipment', {}).get('item_details', [])
-                        filtered_items = [f"{item['item_description']} (Value: {item['item_value']})" for item in items if item['shipment_tracking_id'] == tracking_id]
-                        item_details = ', '.join(filtered_items)
                 result = {
                     'tracking_id': tracking_id,
                     'shipment_id': shipment['shipment_id'],
@@ -117,8 +82,7 @@ def fetch():
                     'agent_info': {
                         'name': shipment['agent_info'].get('name', '')
                     },
-                    'customer_promise_date': customer_promise_date,
-                    'item_details': item_details
+                    'customer_promise_date': customer_promise_date
                 }
                 results.append(result)
             else:
