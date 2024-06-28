@@ -1,0 +1,8 @@
+:root {
+            --tid-width: 120px;
+            --name-width: 150px;
+            --price-width: 60px;
+            --address-width: 400px;
+            --agent-width: 150px;
+            --cpd-width: 80px;
+            --product-width: 400px;

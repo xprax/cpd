@@ -6,31 +6,104 @@
     <title>Track Shipments</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
     <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: Arial, sans-serif;
+        :root {
+            --tid-width: 120px;
+            --name-width: 150px;
+            --price-width: 60px;
+            --address-width: 400px;
+            --agent-width: 150px;
+            --cpd-width: 80px;
+            --product-width: 400px;
         }
-        .container {
-            margin-top: 50px;
+
+        body {
+            background-color: #ffffff;
+            font-family: Arial, sans-serif;
+            padding: 20px;
         }
         .form-group {
             margin-bottom: 15px;
         }
+        .form-control {
+            width: 2.5in; /* Set the width of the textarea */
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            border-color: #545b62;
+        }
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
         .result-table {
             margin-top: 20px;
+            width: 100%;
+            overflow: hidden;
         }
-        .table th, .table td {
+        .table {
+            table-layout: fixed; /* Ensure fixed table layout */
+            width: 100%;
+        }
+        .table-bordered th, .table-bordered td {
+            border: 1px solid #dee2e6 !important;
             text-align: left;
             cursor: pointer;
         }
-        .table td {
+        .table th, .table td {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 600px; /* Adjust as needed */
+            position: relative; /* Necessary for the tap-to-copy indication */
+        }
+        .table th, .table td {
+            padding: 10px;
+        }
+        .table th.tid, .table td.tid {
+            width: var(--tid-width) !important; /* Adjustable width for TID column */
+        }
+        .table th.name, .table td.name {
+            width: var(--name-width) !important; /* Adjustable width for Name column */
+        }
+        .table th.price, .table td.price {
+            width: var(--price-width) !important; /* Adjustable width for Price column */
+        }
+        .table th.address, .table td.address {
+            width: var(--address-width) !important; /* Adjustable width for Address column */
+        }
+        .table th.agent, .table td.agent {
+            width: var(--agent-width) !important; /* Adjustable width for Agent column */
+        }
+        .table th.cpd, .table td.cpd {
+            width: var(--cpd-width) !important; /* Adjustable width for CPD column */
+        }
+        .table th.product, .table td.product {
+            width: var(--product-width) !important; /* Adjustable width for Product Name column */
         }
         .active-cell {
             background-color: #d3d3d3;
+        }
+        .table thead th {
+            background-color: #343a40;
+            color: white;
+        }
+        .table tbody tr:nth-child(even) {
+            background-color: #f2f2f2;
         }
         .popup {
             position: fixed;
@@ -72,23 +145,29 @@
                 right: 5px;
             }
         }
+        .copied-animation {
+            animation: copied 0.5s ease-in-out;
+        }
+        @keyframes copied {
+            0% { background-color: #d3d3d3; }
+            50% { background-color: #5cb85c; }
+            100% { background-color: #d3d3d3; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="text-center">Track Shipments</h1>
-        <form id="tracking-form">
-            <div class="form-group">
-                <label for="tracking_ids">Enter Tracking IDs (one per line):</label>
-                <textarea class="form-control" rows="2" id="tracking_ids" name="tracking_ids" placeholder="Enter Tracking Ids"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Track</button>
-            <button type="button" id="copy-all-button" class="btn btn-secondary">Copy All</button>
-        </form>
-        <div id="loading-spinner" class="loading-spinner"></div>
-        <div id="result" class="result-table"></div>
-        <button id="export-button" class="btn btn-success" style="display:none;">Export to Excel</button>
-    </div>
+    <h1>Track Shipments</h1>
+    <form id="tracking-form">
+        <div class="form-group">
+            <label for="tracking_ids">Enter Tracking IDs (one per line):</label>
+            <textarea class="form-control" rows="2" id="tracking_ids" name="tracking_ids" placeholder="Enter Tracking Ids"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Track</button>
+        <button type="button" id="copy-all-button" class="btn btn-secondary">Copy All</button>
+    </form>
+    <div id="loading-spinner" class="loading-spinner"></div>
+    <div id="result" class="result-table"></div>
+    <button id="export-button" class="btn btn-success" style="display:none;">Export to Excel</button>
     <div id="copy-popup" class="popup">Copied to clipboard</div>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
@@ -103,31 +182,36 @@
             $('#tracking-form').submit(function(event) {
                 event.preventDefault();
                 $('#loading-spinner').show();
-                var tracking_ids = $('#tracking_ids').val();
-                $.post('/fetch', { tracking_ids: tracking_ids }, function(data) {
+                var tracking_ids = $('#tracking_ids').val().split('\n').map(id => id.trim()).filter(id => id);
+
+                var requests = tracking_ids.map(id => $.post('/fetch', { tracking_ids: id }));
+
+                Promise.all(requests).then(responses => {
                     $('#loading-spinner').hide();
-                    if (data.error) {
+                    var allData = responses.flat(); // Flatten the array of arrays
+
+                    if (allData.length === 0) {
                         $('#result').html('<div class="alert alert-danger" role="alert">No data found</div>');
                     } else {
                         var resultHtml = '<h2>Shipment Details</h2>';
-                        resultHtml += '<table class="table table-bordered"><thead><tr><th>Shipment ID</th><th>Name</th><th>COD Amount</th><th>Address</th><th>Agent Info</th><th>Customer Promise Date</th><th>Item Details</th></tr></thead><tbody>';
-                        data.forEach(function(item) {
+                        resultHtml += '<table class="table table-bordered"><thead><tr><th class="tid">TID</th><th class="name">Name</th><th class="price">Price</th><th class="address">Address</th><th class="agent">Agent</th><th class="cpd">CPD</th><th class="product">Product Name</th></tr></thead><tbody>';
+                        allData.forEach(function(item) {
                             resultHtml += '<tr>';
-                            resultHtml += '<td class="table-cell">' + item.shipment_id + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.customer_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.cod_amount + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + formatCustomerInfo(item.customer_info) + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.agent_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.customer_promise_date + '<span class="tap-to-copy">Tap to Copy</span></td>';
-                            resultHtml += '<td class="table-cell">' + item.item_details + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell tid" title="' + item.shipment_id + '">' + item.shipment_id + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell name" title="' + item.customer_info.name + '">' + item.customer_info.name + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell price" title="' + item.cod_amount + '">' + item.cod_amount + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell address" title="' + formatCustomerInfo(item.customer_info) + '">' + formatCustomerInfo(item.customer_info) + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell agent" title="' + (item.agent_info ? item.agent_info.name : 'N/A') + '">' + (item.agent_info ? item.agent_info.name : 'N/A') + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell cpd" title="' + item.customer_promise_date.split(' ')[0] + '">' + item.customer_promise_date.split(' ')[0] + '<span class="tap-to-copy">Tap to Copy</span></td>';
+                            resultHtml += '<td class="table-cell product" title="' + item.item_details + '">' + item.item_details + '<span class="tap-to-copy">Tap to Copy</span></td>';
                             resultHtml += '</tr>';
                         });
                         resultHtml += '</tbody></table>';
                         $('#result').html(resultHtml);
-                        $('#export-button').show().data('exportData', data);
+                        $('#export-button').show().data('exportData', allData);
                         enableKeyboardNavigation();
                     }
-                }).fail(function(xhr, status, error) {
+                }).catch(error => {
                     $('#loading-spinner').hide();
                     $('#result').html('<div class="alert alert-danger" role="alert">Error: ' + error + '</div>');
                 });
@@ -207,7 +291,10 @@
                     window.getSelection().addRange(range);
                     document.execCommand('copy');
                     window.getSelection().removeAllRanges();
-                    showPopup();
+                    $(this).addClass('copied-animation');
+                    setTimeout(() => {
+                        $(this).removeClass('copied-animation');
+                    }, 500);
                 });
             }
         });
